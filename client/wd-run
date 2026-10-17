@@ -1,0 +1,33 @@
+#!/bin/sh
+# wd-run: run a command and report it to a watchdog push check.
+#
+#   wd-run <ping-url> -- <command> [args...]
+#
+# Sends "start", runs the command, then sends its exit code with the last
+# 20 lines of output. The command's output is still printed (so cron mail
+# keeps working) and wd-run exits with the command's exit code.
+#
+# Example crontab line:
+#   */15 * * * *  wd-run https://watchdog.example.com/ping/<token> -- /opt/backup.sh
+set -u
+
+if [ $# -lt 3 ] || [ "$2" != "--" ]; then
+  echo "usage: wd-run <ping-url> -- <command> [args...]" >&2
+  exit 2
+fi
+url=$1
+shift 2
+
+here=$(dirname "$0")
+ping=wd-ping
+[ -x "$here/wd-ping" ] && ping="$here/wd-ping"
+
+out=$(mktemp "${TMPDIR:-/tmp}/wd-run.XXXXXX") || exit 70
+trap 'rm -f "$out"' EXIT HUP INT TERM
+
+"$ping" "$url" start
+"$@" >"$out" 2>&1
+rc=$?
+cat "$out"
+tail -n 20 "$out" | "$ping" "$url" "$rc" -
+exit "$rc"

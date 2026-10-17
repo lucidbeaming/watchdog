@@ -1,0 +1,16 @@
+# Example /etc/cron.d/watchdog on a monitored host. Replace the tokens with the
+# ping URLs shown by `watchdog tui` (or `watchdog show <name>`).
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Host self-check every 5 minutes (push check with interval 300).
+*/5 * * * *  root  host-self-check https://watchdog.example.com/watchdog/ping/TOKEN_1 >/dev/null
+
+# Wrap an existing job: reports start, exit code and the last 20 lines of output.
+30 2 * * *   root  wd-run https://watchdog.example.com/watchdog/ping/TOKEN_2 -- /opt/backup.sh
+
+# Plain heartbeat from a long-running script or another scheduler.
+*/10 * * * * root  wd-ping https://watchdog.example.com/watchdog/ping/TOKEN_3
+
+# On a host OTHER than the watchdog server: alert directly if the watchdog itself is down.
+*/5 * * * *  root  wd-watch-watchdog https://watchdog.example.com/watchdog/healthz /etc/watchdog/pushover.env
