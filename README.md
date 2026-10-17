@@ -59,14 +59,70 @@ Then:
    pushover_user=...
    ```
 2. Set `public_url` in `/etc/watchdog/watchdog.ini`.
-3. Add the reverse-proxy snippet (`deploy/apache-snippet.conf` or
-   `deploy/nginx-snippet.conf`) to your TLS virtual host, then reload the proxy.
+3. Add the reverse proxy to your TLS virtual host (see [Reverse proxy](#reverse-proxy)).
 4. Check that alerts reach your phone: `sudo watchdog test-alert`.
 5. Start the daemon: `sudo systemctl enable --now watchdogd`.
 6. Add checks: `sudo watchdog tui`.
 
 To upgrade, pull the new code, re-run `sudo deploy/install.sh`, then run
 `sudo systemctl restart watchdogd`. Existing config and data are kept.
+
+## Reverse proxy
+
+The daemon listens on `127.0.0.1:8787` only. Publish it through the web server that
+already serves your domain over TLS, so ping URLs look like
+`https://watchdog.example.com/watchdog/ping/<token>`. Don't open port 8787 in the
+firewall: the proxy reaches it over loopback, and inbound traffic arrives on 443 as usual.
+
+**Apache.** Enable the proxy modules:
+
+```sh
+sudo a2enmod proxy proxy_http
+```
+
+Add these lines inside your existing `<VirtualHost *:443>` block (also in
+`deploy/apache-snippet.conf`):
+
+```apache
+ProxyPass        /watchdog/ http://127.0.0.1:8787/
+ProxyPassReverse /watchdog/ http://127.0.0.1:8787/
+```
+
+Then check the config and reload:
+
+```sh
+sudo apachectl configtest && sudo systemctl reload apache2
+```
+
+**nginx.** Add this inside your existing TLS `server { }` block (also in
+`deploy/nginx-snippet.conf`):
+
+```nginx
+location /watchdog/ {
+    proxy_pass http://127.0.0.1:8787/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    client_max_body_size 64k;
+}
+```
+
+Then check the config and reload:
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Check that it works:**
+
+```sh
+curl https://watchdog.example.com/watchdog/healthz
+```
+
+This returns `ok` once the daemon is running. A ping with an unknown token returns `404`.
+
+If you use a different path than `/watchdog/`, change it in both the proxy config and
+`public_url` in `watchdog.ini`. Keep the trailing slashes, so the proxy strips the prefix
+before the request reaches the daemon.
 
 ## Admin TUI
 
