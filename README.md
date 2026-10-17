@@ -67,6 +67,26 @@ Then:
 To upgrade, pull the new code, re-run `sudo deploy/install.sh`, then run
 `sudo systemctl restart watchdogd`. Existing config and data are kept.
 
+### Uninstall
+
+To remove the server, or to clean up a client where the full server was installed by
+mistake (without `--client`), run:
+
+```sh
+sudo systemctl disable --now watchdogd
+sudo rm -f /etc/systemd/system/watchdogd.service && sudo systemctl daemon-reload
+sudo rm -rf /opt/watchdog /var/lib/watchdog /usr/local/bin/watchdog
+sudo rm -f /etc/watchdog/watchdog.ini
+sudo userdel watchdog
+```
+
+- `/var/lib/watchdog` holds the database, so this deletes all checks and their history.
+- The client tools in `/usr/local/bin/wd-*` stay.
+- `/etc/watchdog/pushover.env` stays too, in case `wd-watch-watchdog` on this host needs
+  it. If it still contains the `REPLACE_WITH_…` placeholders, delete it.
+- After `userdel`, reset the directory's ownership with
+  `sudo chown root:root /etc/watchdog && sudo chmod 700 /etc/watchdog`.
+
 ## Reverse proxy
 
 The daemon listens on `127.0.0.1:8787` only. Publish it through the web server that
@@ -118,7 +138,24 @@ sudo nginx -t && sudo systemctl reload nginx
 curl https://watchdog.example.com/watchdog/healthz
 ```
 
-This returns `ok` once the daemon is running. A ping with an unknown token returns `404`.
+This returns `ok` once the daemon is running. A ping with an unknown token returns `404`
+with the plain-text body `not found`. That body comes from the daemon. A styled HTML
+error page instead means the request stopped at the proxy, so the proxy rule isn't
+matching:
+
+```sh
+curl -sS -w '  [HTTP %{http_code}]\n' https://watchdog.example.com/watchdog/ping/00000000000000000000000000000000
+```
+
+Ping URLs contain each check's token, and web servers log full URLs. To keep pings out
+of Apache's access log, replace the vhost's `CustomLog` line with:
+
+```apache
+SetEnvIf Request_URI "^/watchdog/" nolog
+CustomLog ${APACHE_LOG_DIR}/access.log combined env=!nolog
+```
+
+For nginx, add `access_log off;` to the `location /watchdog/` block.
 
 If you use a different path than `/watchdog/`, change it in both the proxy config and
 `public_url` in `watchdog.ini`. Keep the trailing slashes, so the proxy strips the prefix
@@ -233,6 +270,72 @@ Install them with `sudo deploy/install.sh --client`, or copy the files in `clien
 
 See `examples/crontab.example` for typical cron lines.
 
+### Adding a host
+
+1. **Create a push check.** In `watchdog tui`, add one with the interval set to the cron
+   schedule (e.g. `300` for every 5 minutes). Pause it (`p`) until the host is ready,
+   so it doesn't alert as "never pinged" while you set things up.
+2. **Copy the check's ping URL.** It's on the details screen, or run
+   `watchdog show <name>`. Each host needs **its own** check and URL.
+3. **Install the client tools on the host:**
+   `git clone https://github.com/lucidbeaming/watchdog.git && sudo watchdog/deploy/install.sh --client`.
+   Always use `--client` on monitored hosts; without it, the install sets up a second
+   watchdog server.
+4. **Write a self-check script** for the host, e.g. `/usr/local/sbin/<host>-self-check`,
+   starting from `examples/host-self-check.sh`. Then run
+   `sudo chmod 755 /usr/local/sbin/<host>-self-check`.
+5. **Test it** as described in [Testing a cron job](#testing-a-cron-job).
+6. **Add the cron line** in `/etc/cron.d/watchdog`, then resume the check (`r`).
+
+Don't copy a cron file from one host to another without changing both the script name
+and the ping URL. The copy would run a script that doesn't exist there, or ping another
+host's check.
+
+### Self-check tips
+
+- **Prefer probes that don't need root.** `probe_systemd`, `probe_tcp`, `probe_http`,
+  `probe_disk` and `probe_mem` all work as a normal user. Admin tools that need root
+  (for example `mysqladmin` with admin credentials) mean running that host's cron line
+  as `root`. Often a port check (`probe_tcp 127.0.0.1 3306`) is enough.
+- **Find what to watch:** `systemctl list-units --type=service --state=running` lists
+  the services on a host.
+
+### Watching the watchdog
+
+`wd-watch-watchdog` alerts you if the watchdog server itself goes down. Run it on one
+host **other** than the server. It needs that host's own copy of the Pushover keys:
+
+```sh
+sudo install -d -m 700 /etc/watchdog
+sudo install -m 600 /dev/null /etc/watchdog/pushover.env   # then add pushover_token / pushover_user
+```
+
+Then add this cron line in `/etc/cron.d/watchdog`. It runs as `root` because it reads the
+root-only key file:
+
+```
+*/5 * * * *  root  wd-watch-watchdog https://watchdog.example.com/watchdog/healthz
+```
+
+Test it once with
+`sudo wd-watch-watchdog https://watchdog.example.com/watchdog/healthz && echo ok`.
+
+### Updating client hosts
+
+Updating needs only the client tools. A small script on each host keeps it to one step:
+
+```bash
+#!/usr/bin/env bash
+# ~/deploywatchdog.sh: update the checkout and reinstall the client tools.
+set -euo pipefail
+cd "$HOME/watchdog"
+git pull --ff-only
+sudo deploy/install.sh --client
+```
+
+Run it as your normal user, not with `sudo`. Self-check scripts and cron files are left
+alone.
+
 ### Testing a cron job
 
 A job that works when you run it by hand can still fail under cron. Cron runs the
@@ -274,6 +377,8 @@ If no `CMD` line appears:
 - Every line needs a user column after the five schedule fields.
 - The file must end with a newline: cron ignores a last line without one.
 - Lines in `crontab -e` have **no** user column.
+- If it's still missing after you fix the file, restart cron with
+  `sudo systemctl restart cron` (or reboot) so it rereads `/etc/cron.d`.
 
 If `CMD` lines appear but the check never updates, go back to steps 1–3.
 
