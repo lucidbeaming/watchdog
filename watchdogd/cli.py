@@ -301,6 +301,12 @@ def main(argv=None) -> int:
     except config.ConfigError as exc:
         print(f"watchdog: {exc}", file=sys.stderr)
         return 2
+    # Load the command's code while still root: after the switch the service user may
+    # not be able to read the directory the code lives in.
+    if args.command == "tui":
+        from . import tui  # noqa: F401
+    elif args.command == "serve":
+        from . import engine, server  # noqa: F401
     drop_privileges(cfg.run_as)
     try:
         return args.func(cfg, args)

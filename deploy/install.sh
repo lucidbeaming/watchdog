@@ -50,9 +50,11 @@ cp -R "$src/watchdogd" "$PREFIX/watchdogd"
 find "$PREFIX/watchdogd" -name __pycache__ -prune -exec rm -rf {} +
 chmod -R u=rwX,go=rX "$PREFIX/watchdogd"
 
+# -I (isolated): ignore the current directory and PYTHON* variables, so a checkout
+# you happen to be standing in can never shadow the installed code.
 cat >"$BIN/watchdog" <<EOF
 #!/bin/sh
-PYTHONPATH="$PREFIX" exec python3 -m watchdogd "\$@"
+exec python3 -I -c 'import sys; sys.path.insert(0, "$PREFIX"); from watchdogd.cli import main; sys.exit(main())' "\$@"
 EOF
 chmod 755 "$BIN/watchdog"
 echo "installed $PREFIX/watchdogd and $BIN/watchdog"
