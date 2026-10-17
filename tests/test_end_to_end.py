@@ -131,7 +131,26 @@ wd_report {self.base}/ping/{TOKEN}
     def test_wd_ping_never_fails_the_job(self):
         r = self.client(os.path.join(CLIENT, "wd-ping"), "http://127.0.0.1:9/ping/" + TOKEN)
         self.assertEqual(r.returncode, 0)
-        self.assertIn("could not reach", r.stderr)
+        self.assertIn("could not connect to 127.0.0.1:9", r.stderr)
+        self.assertNotIn(TOKEN, r.stderr)
+
+    def test_wd_ping_reports_unknown_token(self):
+        bogus = "0" * 32
+        r = self.client(os.path.join(CLIENT, "wd-ping"), f"{self.base}/ping/{bogus}")
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("token not recognized", r.stderr)
+        self.assertIn("HTTP 404", r.stderr)
+        self.assertNotIn(bogus, r.stderr)
+
+    def test_wd_ping_strict_mode_and_quiet_success(self):
+        wd_ping = os.path.join(CLIENT, "wd-ping")
+        strict = dict(os.environ, WD_STRICT="1")
+        r = subprocess.run([wd_ping, f"{self.base}/ping/{'0' * 32}"], env=strict,
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 1)
+        r = subprocess.run([wd_ping, f"{self.base}/ping/{TOKEN}"], env=strict,
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
 
     def test_cli_mute_and_unmute(self):
         r = self.watchdog(["mute", "1h"])

@@ -26,11 +26,20 @@ if [ "$msg" = "-" ]; then
   msg=$(tail -c 2048)
 fi
 
-if printf '%s' "$msg" | curl -fsS -m 10 --retry 3 --retry-delay 2 \
-     -H 'Content-Type: text/plain; charset=utf-8' --data-binary @- \
-     -o /dev/null "$url"; then
-  exit 0
-fi
-echo "wd-ping: could not reach watchdog" >&2
+err=$(mktemp "${TMPDIR:-/tmp}/wd-ping.XXXXXX") || err=/dev/null
+code=$(printf '%s' "$msg" | curl -sS -m 10 --retry 3 --retry-delay 2 \
+         -H 'Content-Type: text/plain; charset=utf-8' --data-binary @- \
+         -o /dev/null -w '%{http_code}' "$url" 2>"$err")
+detail=$(head -n 1 "$err" 2>/dev/null)
+[ "$err" = /dev/null ] || rm -f "$err"
+
+# Report what went wrong without printing the token (it's a secret).
+host=$(printf '%s' "$url" | sed -e 's#^[a-z]*://##' -e 's#/.*##')
+case $code in
+  200) exit 0 ;;
+  404) echo "wd-ping: token not recognized by $host (HTTP 404); check the ping URL" >&2 ;;
+  000|'') echo "wd-ping: could not connect to $host: ${detail:-no response}" >&2 ;;
+  *) echo "wd-ping: $host answered HTTP $code" >&2 ;;
+esac
 [ "${WD_STRICT:-0}" = 1 ] && exit 1
 exit 0
