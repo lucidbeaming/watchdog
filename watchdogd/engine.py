@@ -134,8 +134,9 @@ class Engine:
 
     # -- inputs ------------------------------------------------------------
 
-    def handle_ping(self, token: str, kind, message: str = "") -> bool:
-        """kind: 'ok' | 'fail' | 'start' | int exit code. Returns False for unknown token."""
+    def handle_ping(self, token: str, kind, message: str = "", source: str | None = None) -> bool:
+        """kind: 'ok' | 'fail' | 'start' | int exit code; source: client IP.
+        Returns False for an unknown token."""
         check = self.store.get_check_by_token(token)
         if check is None:
             return False
@@ -160,7 +161,7 @@ class Engine:
                 if ok:
                     state["last_ok_at"] = now
             self.store.add_event(check["id"], now, kind, kind != "fail", message,
-                                 self.cfg.events_kept)
+                                 self.cfg.events_kept, source=source)
             if check["enabled"]:
                 self._evaluate(check, state, now)
             else:

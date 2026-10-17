@@ -11,6 +11,7 @@ Routes (GET or POST; a POST body becomes the event message):
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 import time
@@ -50,6 +51,23 @@ class Handler(BaseHTTPRequestHandler):
         # Keep the tail: for job output the last lines are the useful ones.
         return data.decode("utf-8", errors="replace")[-MAX_MESSAGE:]
 
+    def client_ip(self) -> str:
+        """The pinging host's address. Behind the reverse proxy (a loopback peer), use the
+        last X-Forwarded-For entry: the one the proxy appended, which a client can't forge."""
+        peer = self.client_address[0]
+        try:
+            from_proxy = ipaddress.ip_address(peer).is_loopback
+        except ValueError:
+            from_proxy = False
+        forwarded = self.headers.get("X-Forwarded-For")
+        if from_proxy and forwarded:
+            last = forwarded.split(",")[-1].strip()
+            try:
+                return str(ipaddress.ip_address(last))
+            except ValueError:
+                pass
+        return peer
+
     def _handle(self):
         engine = self.server.engine
         path = self.path.split("?", 1)[0]
@@ -69,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             kind = int(kind)
         message = self._body() if self.command == "POST" else ""
         try:
-            found = engine.handle_ping(token, kind, message)
+            found = engine.handle_ping(token, kind, message, source=self.client_ip())
         except Exception:
             log.exception("handling ping failed")
             return self._reply(500, "error")

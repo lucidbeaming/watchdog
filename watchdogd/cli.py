@@ -144,7 +144,7 @@ def cmd_show(cfg, args):
     print("\nrecent events:")
     for e in store.recent_events(c["id"], 20):
         print(f"  {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(e['ts']))}  "
-              f"{e['kind']:<5} {'ok ' if e['ok'] else 'ERR'}  "
+              f"{e['kind']:<5} {'ok ' if e['ok'] else 'ERR'}  {e['source'] or '-':<15}  "
               f"{(e['message'] or '').splitlines()[0][:80] if e['message'] else ''}")
     return 0
 

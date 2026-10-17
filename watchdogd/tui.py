@@ -372,6 +372,14 @@ class App:
                 facts.append(("reason", st["reason"].splitlines()[0], 0))
             facts.append(("last seen", f"{checks.fmt_duration(now - st['last_seen'])} ago"
                           if st.get("last_seen") else "never", 0))
+            events = self.store.recent_events(check_id, max(1, h - 3))
+            if ch["kind"] == "push":
+                sources = [e["source"] for e in events if e["source"]]
+                if sources:
+                    others = len(set(sources)) - 1
+                    text = sources[0] + (f"  (+{others} other address{'es' * (others > 1)} "
+                                         "in recent events)" if others else "")
+                    facts.append(("from", text, self.c("warn") if others else 0))
             if (ch.get("paused_until") or 0) > now:
                 facts.append(("paused", f"for another "
                               f"{checks.fmt_duration(ch['paused_until'] - now)}",
@@ -389,7 +397,6 @@ class App:
             y += 1
             self.put(y, 1, "Recent events", curses.A_BOLD)
             y += 1
-            events = self.store.recent_events(check_id, max(1, h - y - 3))
             if not events:
                 self.put(y, 3, "none yet", curses.A_DIM)
             for ev in events:
@@ -401,7 +408,8 @@ class App:
                 self.put(y, 19, f"{ev['kind']:<5}")
                 self.put(y, 25, "ok " if ev["ok"] else "ERR",
                          self.c("up") if ev["ok"] else self.c("down"))
-                self.put(y, 29, first[0] if first else "")
+                self.put(y, 29, ev["source"] or "", curses.A_DIM, 16)
+                self.put(y, 46, first[0] if first else "")
                 y += 1
 
             self.draw_flash(h - 2)
