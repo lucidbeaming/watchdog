@@ -1,0 +1,117 @@
+# ---------------------------------------------------------------
+# Secrets and site-specific config: never commit.
+# Commit only sanitized templates (*.example.*) with placeholders.
+# ---------------------------------------------------------------
+.env
+.env.*
+*.env
+!*.example.env
+!.env.example
+*.ini
+!*.example.ini
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+# Personal notes, deploy details, host inventories, etc.
+local/
+*.local
+*.local.*
+
+# ---------------------------------------------------------------
+# Runtime state
+# ---------------------------------------------------------------
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Test, coverage and type-check caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+.dmypy.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ---------------------------------------------------------------
+# Editors / IDEs
+# ---------------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.nova/
+*.sublime-project
+*.sublime-workspace
+# Transmit / FTP sync settings may contain hostnames
+.transmit*
+sftp-config.json
+.ftpconfig
+
+# ---------------------------------------------------------------
+# Claude Code local settings
+# ---------------------------------------------------------------
+.claude/settings.local.json
