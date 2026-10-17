@@ -39,6 +39,7 @@ class Engine:
         self._send_lock = threading.Lock()
         self._last_housekeeping = 0.0
         self._warned_unconfigured = False
+        self._was_muted = False
 
     def shutdown(self):
         if self.executor:
@@ -84,13 +85,20 @@ class Engine:
             return "up", "ok"
         return "new", "waiting for first ping"
 
+    def muted(self, now=None) -> bool:
+        """Global mute: checks keep running and recording, but nothing is sent."""
+        until = self.store.get_mute()
+        return until is not None and until > (self.clock() if now is None else now)
+
     def _evaluate(self, check, state, now):
         status, reason = self._compute(check, state, now)
         if status != state["status"]:
             state["since"] = now
         state["status"], state["reason"] = status, reason
 
-        paused = (check.get("paused_until") or 0) > now
+        # Paused or muted: keep tracking but don't alert. alerted_status stays put, so
+        # anything still down when the pause/mute ends alerts then.
+        paused = (check.get("paused_until") or 0) > now or self.muted(now)
         effective = "down" if status == "down" else "up"
         if not paused:
             if effective != state["alerted_status"]:
@@ -226,7 +234,17 @@ class Engine:
             return
         try:
             now = self.clock()
+            muted = self.muted(now)
+            if muted != self._was_muted:
+                log.info("notifications %s", "muted" if muted else "unmuted")
+                self._was_muted = muted
+            if muted:
+                return  # queued alerts wait until unmuted
             for alert in self.store.pending_alerts():
+                if now - alert["created_at"] > GIVE_UP_AFTER:
+                    self.store.mark_alert(alert["id"], sent=False, attempts=alert["attempts"],
+                                          error="expired before it could be sent", give_up=True)
+                    continue
                 if self._next_send.get(alert["id"], 0) > now:
                     continue
                 attempts = alert["attempts"] + 1

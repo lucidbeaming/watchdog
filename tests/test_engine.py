@@ -115,6 +115,52 @@ class PushCheckTests(EngineTestCase):
         self.tick(10)
         self.assertEqual(self.notifier.sent, [])
 
+    def test_global_mute_tracks_but_does_not_alert(self):
+        self.store.set_mute(float("inf"))
+        self.engine.handle_ping(TOKEN, "fail", "broken")
+        self.tick(10)
+        self.assertEqual(self.notifier.sent, [])
+        self.assertEqual(self.state(self.cid)["status"], "down")  # still tracked
+        self.assertEqual(self.store.recent_events(self.cid)[0]["kind"], "fail")
+        self.store.set_mute(None)
+        self.tick(10)
+        self.assertEqual(self.notifier.titles(), ["DOWN: job"])
+
+    def test_recovered_during_global_mute_sends_nothing(self):
+        self.store.set_mute(float("inf"))
+        self.engine.handle_ping(TOKEN, "fail")
+        self.tick(10)
+        self.engine.handle_ping(TOKEN, "ok")
+        self.tick(10)
+        self.store.set_mute(None)
+        self.tick(10)
+        self.assertEqual(self.notifier.sent, [])
+
+    def test_timed_global_mute_expires(self):
+        self.store.set_mute(self.clock() + 600)
+        self.engine.handle_ping(TOKEN, "fail")
+        self.tick(300)
+        self.assertEqual(self.notifier.sent, [])
+        self.tick(301)
+        self.assertEqual(self.notifier.titles(), ["DOWN: job"])
+
+    def test_queued_alert_waits_while_muted(self):
+        self.engine.handle_ping(TOKEN, "fail")  # queued, not yet sent
+        self.store.set_mute(float("inf"))
+        self.tick(10)
+        self.assertEqual(self.notifier.sent, [])
+        self.store.set_mute(None)
+        self.tick(10)
+        self.assertEqual(self.notifier.titles(), ["DOWN: job"])
+
+    def test_stale_queued_alert_is_dropped(self):
+        self.engine.handle_ping(TOKEN, "fail")
+        self.store.set_mute(float("inf"))
+        self.tick(2 * 86400)
+        self.store.set_mute(None)
+        self.tick(10)
+        self.assertEqual(self.notifier.sent, [])
+
     def test_disabled_check_never_alerts(self):
         self.store.update_check(self.cid, {"enabled": 0})
         self.engine.handle_ping(TOKEN, "fail")

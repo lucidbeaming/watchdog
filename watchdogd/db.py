@@ -202,6 +202,24 @@ class Store:
         for cid in check_ids:
             self.execute("UPDATE checks SET paused_until = ? WHERE id = ?", (until, cid))
 
+    # -- global notification mute ------------------------------------------
+
+    def get_mute(self):
+        """None when notifications are on, else the epoch they resume (inf = until unmuted)."""
+        rows = self.query("SELECT v FROM meta WHERE k = 'mute_until'")
+        if not rows:
+            return None
+        return float("inf") if rows[0]["v"] == "inf" else float(rows[0]["v"])
+
+    def set_mute(self, until):
+        """until: epoch seconds, float('inf') for indefinitely, or None to unmute."""
+        if until is None:
+            self.execute("DELETE FROM meta WHERE k = 'mute_until'")
+        else:
+            value = "inf" if until == float("inf") else repr(float(until))
+            self.execute("INSERT INTO meta (k, v) VALUES ('mute_until', ?) "
+                         "ON CONFLICT(k) DO UPDATE SET v = excluded.v", (value,))
+
     # -- state -------------------------------------------------------------
 
     def all_states(self) -> dict:

@@ -133,6 +133,19 @@ wd_report {self.base}/ping/{TOKEN}
         self.assertEqual(r.returncode, 0)
         self.assertIn("could not reach", r.stderr)
 
+    def test_cli_mute_and_unmute(self):
+        r = self.watchdog(["mute", "1h"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("muted for 1h", r.stdout)
+        self.assertIn("notifications muted for", self.watchdog(["status"]).stdout)
+        self.client(os.path.join(CLIENT, "wd-ping"), f"{self.base}/ping/{TOKEN}", "fail")
+        time.sleep(1)
+        self.assertEqual(self.pushover.messages, [])
+        r = self.watchdog(["unmute"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.wait_for(lambda: self.pushover.messages, "down alert after unmute")
+        self.assertEqual(self.pushover.messages[0]["title"], "DOWN: backup")
+
     def test_cli_pause_and_show(self):
         r = self.watchdog(["pause", "backup", "2h"])
         self.assertEqual(r.returncode, 0, r.stderr)

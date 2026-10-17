@@ -144,6 +144,38 @@ class TuiTests(unittest.TestCase):
         self.assertEqual(self.wait_exit(), 0)
         self.assertEqual(self.checks(), [])
 
+    def store(self):
+        store = Store(os.path.join(self.dir, "wd.db"))
+        self.addCleanup(store.close)
+        return store
+
+    def test_mute_all_and_unmute(self):
+        self.start()
+        self.send("m")
+        self.wait_for_text("Mute ALL notifications")
+        self.type("2h")
+        self.send(ENTER)
+        self.wait_for_text("NOTIFICATIONS MUTED for")
+        until = self.store().get_mute()
+        self.assertAlmostEqual(until - time.time(), 7200, delta=30)
+        self.send("m")
+        self.wait_for_text("Unmute now?")
+        self.send("y")
+        self.wait_for_text("notifications on")
+        self.assertIsNone(self.store().get_mute())
+        self.send("q")
+        self.assertEqual(self.wait_exit(), 0)
+
+    def test_mute_indefinitely(self):
+        self.start()
+        self.send("m")
+        self.wait_for_text("Mute ALL notifications")
+        self.send(ENTER)
+        self.wait_for_text("NOTIFICATIONS MUTED until unmuted")
+        self.assertEqual(self.store().get_mute(), float("inf"))
+        self.send("q")
+        self.assertEqual(self.wait_exit(), 0)
+
     def test_delete_with_confirmation(self):
         store = Store(os.path.join(self.dir, "wd.db"))
         store.init_schema()

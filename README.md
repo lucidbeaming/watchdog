@@ -15,7 +15,8 @@ It does two kinds of check:
 
 Alerts are sent only when a check's state changes: one alert when it goes down, one when
 it recovers. You can optionally add a single "still down" reminder. Checks can be paused
-for maintenance. If a Pushover send fails, the alert waits in an outbox and is retried.
+for maintenance, or you can mute all notifications at once while every check keeps running.
+If a Pushover send fails, the alert waits in an outbox and is retried.
 
 ```
  watchdog  ·  3 checks  ·  1 down  ·  1 paused
@@ -24,7 +25,7 @@ for maintenance. If a Pushover send fails, the alert waits in an outbox and is r
  nightly-backup         push  ops          up              30m ago     ping every 1d
  www-home               http  sites        down            20s ago     HTTP 503 (expected 200-399)
 
- a add  Enter view  e edit  p pause  r resume  d delete  / filter  t test alert  q quit
+ a add  Enter view  e edit  p pause  r resume  d delete  / filter  m mute all  t test alert  q quit
 ```
 
 ## Requirements
@@ -79,6 +80,7 @@ To upgrade, pull the new code, re-run `sudo deploy/install.sh`, then run
 | `p` / `r` | pause for a duration (`30m`, `2h`, `1d`) / resume |
 | `d` | delete (asks for confirmation) |
 | `/` | filter by name, group, label or type |
+| `m` | mute all notifications for a duration, or until unmuted (leave the duration empty); press again to unmute |
 | `t` | send a test notification |
 | `n` | (in details) replace a push check's token |
 | `q` | quit |
@@ -91,6 +93,12 @@ In the add/edit form:
 
 The fields shown depend on the type. Saving a push check generates its secret ping URL,
 which you can select and copy from the details screen.
+
+While notifications are muted, checks keep running and their status keeps updating,
+and the TUI header says so. When you unmute, any check that is still down alerts once.
+A check that went down and recovered during the mute sends nothing. Alerts are muted only
+inside the watchdog: `wd-watch-watchdog` on another host still alerts if the watchdog
+itself stops responding.
 
 Changes take effect on the daemon's next tick (15 seconds by default), with no restart.
 Run as root, the `watchdog` command switches to the `watchdog` user so the database
@@ -169,6 +177,8 @@ watchdog status [--group G]    table of checks; exits 1 if any is down
 watchdog show NAME             details, ping URL, recent events
 watchdog pause NAME|group:G 2h
 watchdog resume NAME|group:G
+watchdog mute [DURATION]       stop all notifications; checks keep running
+watchdog unmute
 watchdog test-alert [MESSAGE]
 watchdog new-token
 watchdog init-db

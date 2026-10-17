@@ -98,9 +98,21 @@ def display_status(check, state, now) -> str:
     return status
 
 
+def mute_text(until, now) -> str:
+    """'' when notifications are on, else e.g. 'for 1h 59m' or 'until unmuted'."""
+    if until is None or until <= now:
+        return ""
+    if until == float("inf"):
+        return "until unmuted"
+    return f"for {checks.fmt_duration(until - now)}"
+
+
 def cmd_status(cfg, args):
     store = open_store(cfg)
     now = time.time()
+    mute = mute_text(store.get_mute(), now)
+    if mute:
+        print(f"notifications muted {mute} (checks still running; `watchdog unmute`)\n")
     rows = _status_rows(store, now, args.group)
     if not rows:
         print("no checks yet: add some with `watchdog tui`")
@@ -188,6 +200,27 @@ def cmd_resume(cfg, args):
     return 0
 
 
+def cmd_mute(cfg, args):
+    store = open_store(cfg)
+    if args.duration:
+        try:
+            seconds = checks.parse_duration(args.duration)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
+        store.set_mute(time.time() + seconds)
+        print(f"all notifications muted for {checks.fmt_duration(seconds)}; checks keep running")
+    else:
+        store.set_mute(float("inf"))
+        print("all notifications muted until `watchdog unmute`; checks keep running")
+    return 0
+
+
+def cmd_unmute(cfg, args):
+    open_store(cfg).set_mute(None)
+    print("notifications on")
+    return 0
+
+
 def cmd_test_alert(cfg, args):
     try:
         Pushover.from_config(cfg).send("watchdog test", args.message, priority=args.priority)
@@ -239,6 +272,11 @@ def build_parser():
     s = sub.add_parser("resume", help="end a pause")
     s.add_argument("target", help="check name or group:NAME")
     s.set_defaults(func=cmd_resume)
+    s = sub.add_parser("mute", help="stop all notifications (checks keep running), "
+                       "e.g. `mute 2h`; no duration = until unmuted")
+    s.add_argument("duration", nargs="?", help="e.g. 30m, 2h, 1d")
+    s.set_defaults(func=cmd_mute)
+    sub.add_parser("unmute", help="turn notifications back on").set_defaults(func=cmd_unmute)
     s = sub.add_parser("test-alert", help="send one Pushover message")
     s.add_argument("message", nargs="?", default="Test alert from watchdog.")
     s.add_argument("--priority", type=int, default=0, choices=checks.PRIORITIES)

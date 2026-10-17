@@ -13,7 +13,7 @@ import time
 
 from . import checks
 from .checks import FIELD_BY_NAME, KIND_HELP, blank_check, fields_for, new_token, validate
-from .cli import describe_check, display_status
+from .cli import describe_check, display_status, mute_text
 from .db import StoreError
 from .notify import NotifyError, Pushover
 
@@ -197,7 +197,11 @@ class App:
         if self.filter:
             head += f" matching '{self.filter}'"
         head += f"  ·  {down} down" + (f"  ·  {paused} paused" if paused else "")
-        self.bar(0, head, curses.A_REVERSE | (self.c("down") if down else 0))
+        mute = mute_text(self.store.get_mute(), now)
+        if mute:
+            head += f"  ·  NOTIFICATIONS MUTED {mute}"
+        color = self.c("down") if down else (self.c("warn") if mute else 0)
+        self.bar(0, head, curses.A_REVERSE | color | (curses.A_BOLD if mute else 0))
 
         cols = (("NAME", 22), ("TYPE", 5), ("GROUP", 12), ("STATUS", 15), ("LAST SEEN", 11))
         x = 1
@@ -236,7 +240,7 @@ class App:
 
         self.draw_flash(h - 2)
         self.bar(h - 1, " a add  Enter view  e edit  p pause  r resume  d delete  "
-                        "/ filter  t test alert  q quit")
+                        "/ filter  m mute all  t test alert  q quit")
         self.scr.noutrefresh()
         curses.doupdate()
 
@@ -276,6 +280,8 @@ class App:
                     self.filter, self.sel = text, 0
             elif key == "t":
                 self.test_alert()
+            elif key == "m":
+                self.toggle_mute()
             elif current is None:
                 continue
             elif key in ENTER or key == "v":
@@ -305,6 +311,31 @@ class App:
             return
         self.store.set_paused([check["id"]], time.time() + seconds)
         self.flash(f"paused {check['name']} for {checks.fmt_duration(seconds)}")
+
+    def toggle_mute(self):
+        now = time.time()
+        mute = mute_text(self.store.get_mute(), now)
+        if mute:
+            if self.confirm(f"Notifications are muted {mute}. Unmute now?"):
+                self.store.set_mute(None)
+                self.flash("notifications on; checks still down will alert on the next tick")
+            return
+        text = self.prompt("Mute ALL notifications for (e.g. 2h, 1d; empty = until unmuted):")
+        if text is None:
+            return
+        if not text:
+            self.store.set_mute(float("inf"))
+            self.flash("all notifications muted until you unmute (m); checks keep running",
+                       seconds=6)
+            return
+        try:
+            seconds = checks.parse_duration(text)
+        except ValueError as exc:
+            self.flash(str(exc), error=True)
+            return
+        self.store.set_mute(now + seconds)
+        self.flash(f"all notifications muted for {checks.fmt_duration(seconds)}; "
+                   "checks keep running", seconds=6)
 
     def test_alert(self):
         if not self.confirm("Send a test notification through Pushover?"):
@@ -345,6 +376,9 @@ class App:
                 facts.append(("paused", f"for another "
                               f"{checks.fmt_duration(ch['paused_until'] - now)}",
                               self.c("warn")))
+            mute = mute_text(self.store.get_mute(), now)
+            if mute:
+                facts.append(("alerts", f"all notifications muted {mute}", self.c("warn")))
             if ch["kind"] != "push" and st.get("consecutive_failures"):
                 facts.append(("failures", f"{st['consecutive_failures']} in a row", 0))
             for label, value, attr in facts:
