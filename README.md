@@ -216,8 +216,10 @@ Install them with `sudo deploy/install.sh --client`, or copy the files in `clien
 `/usr/local/bin`.
 
 - `wd-ping <url> [ok|fail|start|<code>] [message|-]` sends one ping. A message of `-`
-  reads it from stdin. It exits 0 even if the watchdog is unreachable, so monitoring
-  never breaks a job; set `WD_STRICT=1` to change that.
+  reads it from stdin. It prints nothing when the ping is accepted. When the ping fails,
+  it prints the reason on stderr, without the token: `token not recognized (HTTP 404)`,
+  `could not connect to …`, or another HTTP status. It still exits 0, so monitoring
+  never breaks a job; set `WD_STRICT=1` to exit 1 instead.
 - `wd-run <url> -- <command...>` wraps any job. It sends `start`, runs the command, then
   sends the exit code with the last 20 lines of output. The output is still printed for
   cron mail, and the exit code is passed through.
@@ -230,6 +232,50 @@ Install them with `sudo deploy/install.sh --client`, or copy the files in `clien
   when it recovers.
 
 See `examples/crontab.example` for typical cron lines.
+
+### Testing a cron job
+
+A job that works when you run it by hand can still fail under cron. Cron runs the
+command as the user in the cron line, with an almost empty environment, and it runs the
+script directly rather than through `sh`. With `>/dev/null 2>&1` on the line, the error
+also disappears. Before relying on a new job, check these four things.
+
+**1. The token belongs to the right check.** Compare the URL in the cron line with
+`sudo watchdog show <check>` on the watchdog server. A token copied from the wrong
+check pings that other check instead. The details screen in the TUI flags this: a "from"
+line with several addresses means more than one host is using the same URL.
+
+**2. The script is executable.** `ls -l /usr/local/sbin/<script>` must show `x`
+permissions (`-rwxr-xr-x`). Running it as `sh script` works without them, but cron needs
+them. Fix with `sudo chmod 755 /usr/local/sbin/<script>`.
+
+**3. It works the way cron runs it.** Run the exact command from the cron line, as the
+same user and in an empty environment, with `WD_STRICT=1` so a failed ping shows up in
+the exit code:
+
+```sh
+sudo -u USER env -i HOME=/tmp SHELL=/bin/sh \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  sh -c 'WD_STRICT=1 host-self-check https://watchdog.example.com/watchdog/ping/TOKEN; echo "exit $?"'
+```
+
+`exit 0` with no `wd-ping:` message means the ping was accepted, and the check's "last
+seen" in the TUI resets.
+
+**4. Cron runs it.** After the next scheduled time, look for a `CMD` line:
+
+```sh
+sudo grep CRON /var/log/syslog | tail -5
+```
+
+If no `CMD` line appears:
+
+- Files in `/etc/cron.d` must be owned by root and not writable by group or others.
+- Every line needs a user column after the five schedule fields.
+- The file must end with a newline: cron ignores a last line without one.
+- Lines in `crontab -e` have **no** user column.
+
+If `CMD` lines appear but the check never updates, go back to steps 1–3.
 
 ## Command line
 
