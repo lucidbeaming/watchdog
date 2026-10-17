@@ -203,6 +203,13 @@ message and appears in the alert.
 
 An unknown token returns `404`.
 
+Each ping records the address it came from. Behind the reverse proxy, that's the last
+`X-Forwarded-For` entry, which the proxy itself appends, so a client can't fake it. The
+header is trusted only on requests that arrive from localhost. The details screen in the
+TUI and `watchdog show` list the source of every event. For a push check, the "from"
+line warns when recent pings came from more than one address, which usually means two
+hosts were set up with the same ping URL.
+
 ## Client tools (monitored hosts)
 
 Install them with `sudo deploy/install.sh --client`, or copy the files in `client/` to

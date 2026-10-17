@@ -176,6 +176,21 @@ class TuiTests(unittest.TestCase):
         self.send("q")
         self.assertEqual(self.wait_exit(), 0)
 
+    def test_detail_shows_ping_sources(self):
+        store = self.store()
+        store.init_schema()
+        cid = store.add_check(dict(name="shared", kind="push", token="f" * 32, interval_s=300,
+                                   enabled=1))
+        store.add_event(cid, time.time() - 60, "ok", True, "", 100, source="203.0.113.10")
+        store.add_event(cid, time.time(), "ok", True, "", 100, source="203.0.113.20")
+        self.start()
+        self.wait_for_text("shared")
+        self.send(ENTER)
+        self.wait_for_text("203.0.113.20  (+1 other address in recent events)")
+        self.wait_for_text("203.0.113.10")
+        self.send(ESC, "q")
+        self.assertEqual(self.wait_exit(), 0)
+
     def test_delete_with_confirmation(self):
         store = Store(os.path.join(self.dir, "wd.db"))
         store.init_schema()

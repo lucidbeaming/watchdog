@@ -23,9 +23,10 @@ class ServerTests(unittest.TestCase):
         self.addCleanup(self.httpd.shutdown)
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
 
-    def request(self, path, data=None):
+    def request(self, path, data=None, headers=None):
+        req = urllib.request.Request(self.base + path, data=data, headers=headers or {})
         try:
-            with urllib.request.urlopen(self.base + path, data=data, timeout=5) as r:
+            with urllib.request.urlopen(req, timeout=5) as r:
                 return r.status, r.read().decode()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode()
@@ -62,6 +63,25 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request("/ping/short")[0], 404)
         self.assertEqual(self.request("/")[0], 404)
         self.assertEqual(self.events(), [])
+
+    def test_source_is_peer_address(self):
+        self.request(f"/ping/{TOKEN}")
+        self.assertEqual(self.events()[0]["source"], "127.0.0.1")
+
+    def test_source_from_proxy_header(self):
+        # Apache appends the real client address to X-Forwarded-For.
+        self.request(f"/ping/{TOKEN}", headers={"X-Forwarded-For": "203.0.113.7"})
+        self.assertEqual(self.events()[0]["source"], "203.0.113.7")
+
+    def test_forged_forwarded_for_is_ignored(self):
+        # A client-supplied entry comes first; the proxy's own entry is last.
+        self.request(f"/ping/{TOKEN}",
+                     headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.7"})
+        self.assertEqual(self.events()[0]["source"], "203.0.113.7")
+
+    def test_garbage_forwarded_for_falls_back_to_peer(self):
+        self.request(f"/ping/{TOKEN}", headers={"X-Forwarded-For": "not-an-ip"})
+        self.assertEqual(self.events()[0]["source"], "127.0.0.1")
 
     def test_healthz(self):
         self.assertEqual(self.request("/healthz")[0], 503)

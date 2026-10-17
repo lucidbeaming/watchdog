@@ -11,7 +11,7 @@ import sqlite3
 import threading
 import time
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 CHECK_COLUMNS = (
     "name", "kind", "label", "group_name", "token", "url", "expect_status", "expect_text",
@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS check_events (
     ts REAL NOT NULL,
     kind TEXT NOT NULL,
     ok INTEGER NOT NULL,
-    message TEXT
+    message TEXT,
+    source TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_check ON check_events (check_id, id);
@@ -149,8 +150,17 @@ class Store:
     def init_schema(self):
         with self._lock:
             self._connection().executescript(SCHEMA)
+            self._migrate()
             self.execute("INSERT OR IGNORE INTO meta (k, v) VALUES (?, ?)",
                          ("schema_version", str(SCHEMA_VERSION)))
+
+    def _migrate(self):
+        """Bring databases created by older versions up to the current schema."""
+        cols = {r["name"] for r in self.query("PRAGMA table_info(check_events)")}
+        if "source" not in cols:  # v1 -> v2: client address of each ping
+            self.execute("ALTER TABLE check_events ADD COLUMN source TEXT")
+        self.execute("INSERT INTO meta (k, v) VALUES ('schema_version', ?) "
+                     "ON CONFLICT(k) DO UPDATE SET v = excluded.v", (str(SCHEMA_VERSION),))
 
     # -- checks ------------------------------------------------------------
 
@@ -247,11 +257,13 @@ class Store:
 
     # -- events ------------------------------------------------------------
 
-    def add_event(self, check_id: int, ts: float, kind: str, ok: bool, message: str, keep: int):
+    def add_event(self, check_id: int, ts: float, kind: str, ok: bool, message: str, keep: int,
+                  source: str | None = None):
         with self._lock:
             self.execute(
-                "INSERT INTO check_events (check_id, ts, kind, ok, message) VALUES (?, ?, ?, ?, ?)",
-                (check_id, ts, kind, 1 if ok else 0, message))
+                "INSERT INTO check_events (check_id, ts, kind, ok, message, source) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (check_id, ts, kind, 1 if ok else 0, message, source))
             self.execute(
                 "DELETE FROM check_events WHERE check_id = ? AND id NOT IN "
                 "(SELECT id FROM check_events WHERE check_id = ? ORDER BY id DESC LIMIT ?)",
