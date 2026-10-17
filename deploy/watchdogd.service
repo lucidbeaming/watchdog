@@ -1,0 +1,32 @@
+[Unit]
+Description=watchdog: dead-man's-switch pings and uptime probes with Pushover alerts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=watchdog
+Group=watchdog
+# systemd reads this as root, so the file can stay root-only (600).
+EnvironmentFile=-/etc/watchdog/pushover.env
+ExecStart=/usr/local/bin/watchdog -c /etc/watchdog/watchdog.ini serve
+Restart=always
+RestartSec=5
+
+StateDirectory=watchdog
+StateDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

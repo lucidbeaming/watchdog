@@ -1,0 +1,36 @@
+#!/bin/sh
+# wd-ping: report to a watchdog push check.
+#
+#   wd-ping <ping-url> [ok|fail|start|<exit-code>] [message | -]
+#
+# A message of "-" is read from stdin. Messages are sent as the POST body,
+# never in the URL. Exits 0 even if the watchdog is unreachable (so a monitored
+# job never fails because of monitoring), unless WD_STRICT=1.
+set -u
+
+usage() { echo "usage: wd-ping <ping-url> [ok|fail|start|<exit-code>] [message|-]" >&2; exit 2; }
+
+[ $# -ge 1 ] || usage
+url=${1%/}
+kind=${2:-ok}
+msg=${3:-}
+
+case $kind in
+  ok|fail|start) ;;
+  *[!0-9]*|'') usage ;;
+  *) [ "$kind" -le 255 ] 2>/dev/null || usage ;;
+esac
+[ "$kind" = ok ] || url="$url/$kind"
+
+if [ "$msg" = "-" ]; then
+  msg=$(tail -c 2048)
+fi
+
+if printf '%s' "$msg" | curl -fsS -m 10 --retry 3 --retry-delay 2 \
+     -H 'Content-Type: text/plain; charset=utf-8' --data-binary @- \
+     -o /dev/null "$url"; then
+  exit 0
+fi
+echo "wd-ping: could not reach watchdog" >&2
+[ "${WD_STRICT:-0}" = 1 ] && exit 1
+exit 0

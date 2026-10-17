@@ -1,0 +1,56 @@
+#!/bin/sh
+# wd-watch-watchdog: watch the watchdog itself from another host.
+#
+#   wd-watch-watchdog <healthz-url> [pushover-env-file]
+#
+# Run from cron every few minutes on a host other than the watchdog server.
+# After 2 failed checks in a row it sends a Pushover alert directly (not via
+# the watchdog), and a recovery alert when it comes back. The env file holds
+# pushover_token=... and pushover_user=... (default /etc/watchdog/pushover.env).
+set -u
+
+[ $# -ge 1 ] || { echo "usage: wd-watch-watchdog <healthz-url> [pushover-env-file]" >&2; exit 2; }
+url=$1
+env_file=${2:-/etc/watchdog/pushover.env}
+state_dir=${WD_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/wd-watch-watchdog}
+fails_needed=${WD_FAILS:-2}
+
+mkdir -p "$state_dir" || exit 1
+key=$(printf '%s' "$url" | cksum | cut -d' ' -f1)
+state_file="$state_dir/$key"
+fails=0
+status=up
+[ -r "$state_file" ] && read -r status fails <"$state_file"
+
+env_value() {
+  # Case-insensitive KEY=VALUE lookup without sourcing the file.
+  grep -iE "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=" "$env_file" 2>/dev/null \
+    | tail -n 1 | sed -e 's/^[^=]*=[[:space:]]*//' -e "s/^[\"']//" -e "s/[\"'][[:space:]]*\$//"
+}
+
+notify() {
+  token=$(env_value pushover_token)
+  user=$(env_value pushover_user)
+  if [ -z "$token" ] || [ -z "$user" ]; then
+    echo "wd-watch-watchdog: no pushover_token/pushover_user in $env_file" >&2
+    return 1
+  fi
+  curl -s -m 15 --form-string "token=$token" --form-string "user=$user" \
+    --form-string "title=$1" --form-string "message=$2" --form-string "priority=$3" \
+    https://api.pushover.net/1/messages.json >/dev/null
+}
+
+if curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
+  if [ "$status" = down ]; then
+    notify "UP: watchdog" "The watchdog is responding again ($url)." 0 || exit 1
+  fi
+  status=up
+  fails=0
+else
+  fails=$((fails + 1))
+  if [ "$status" = up ] && [ "$fails" -ge "$fails_needed" ]; then
+    notify "DOWN: watchdog" "The watchdog health check failed $fails times in a row ($url). Checks are not being monitored." 1 || exit 1
+    status=down
+  fi
+fi
+echo "$status $fails" >"$state_file"

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "watchdogd"
+description = "Dead-man's-switch pings and uptime probes with Pushover alerts, SQLite storage and an admin TUI"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+dynamic = ["version"]
+
+[project.scripts]
+watchdog = "watchdogd.cli:main"
+
+[tool.setuptools]
+packages = ["watchdogd"]
+
+[tool.setuptools.dynamic]
+version = { attr = "watchdogd.__version__" }
