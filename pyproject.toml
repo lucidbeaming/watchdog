@@ -11,6 +11,11 @@ license = { text = "MIT" }
 dependencies = []
 dynamic = ["version"]
 
+[project.urls]
+Homepage = "https://github.com/lucidbeaming/watchdog"
+Source = "https://github.com/lucidbeaming/watchdog"
+Issues = "https://github.com/lucidbeaming/watchdog/issues"
+
 [project.scripts]
 watchdog = "watchdogd.cli:main"
 
