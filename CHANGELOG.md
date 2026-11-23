@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+- README: real TUI capture replacing the hand-drawn mock, description line, related projects (#10)
+
 ### Changed
 - Repository metadata (#6)
 - Package metadata: `[project.urls]` in `pyproject.toml` (#6)

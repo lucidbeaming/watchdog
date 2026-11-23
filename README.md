@@ -1,5 +1,7 @@
 # watchdog
 
+Self-hosted dead-man's-switch and uptime monitor with Pushover alerts.
+
 A small, self-hosted monitor that sends alerts through [Pushover](https://pushover.net).
 Pure Python standard library, no dependencies: one daemon, a SQLite file, and an admin TUI.
 
@@ -19,14 +21,17 @@ for maintenance, or you can mute all notifications at once while every check kee
 If a Pushover send fails, the alert waits in an outbox and is retried.
 
 ```
- watchdog  ·  3 checks  ·  1 down  ·  1 paused
+ watchdog  ·  4 checks  ·  1 down  ·  1 paused
  NAME                   TYPE  GROUP        STATUS          LAST SEEN   TARGET / REASON
- db-primary             tcp   ops          up (paused)     40s ago     db.example.com:5432
- nightly-backup         push  ops          up              30m ago     ping every 1d
- www-home               http  sites        down            20s ago     HTTP 503 (expected 200-399)
+ db-primary             tcp   ops          up (paused)     8s ago      localhost:9132
+ nightly-backup         push  ops          up              35s ago     ping every 24h
+ api-health             http  sites        up              8s ago      http://localhost:9132/health
+ www-home               http  sites        down            8s ago      HTTP 503 (expected 200-399)
 
  a add  Enter view  e edit  p pause  r resume  d delete  / filter  m mute all  t test alert  q quit
 ```
+
+(The admin TUI, captured from a local test instance with four checks.)
 
 ## Requirements
 
@@ -423,6 +428,10 @@ The tests cover:
 
 `.env`, `*.ini`, databases and `local/` are gitignored. Keep real hostnames and tokens
 out of tracked files.
+
+## Related projects
+
+- [claudeproxy](https://github.com/lucidbeaming/claudeproxy): another small self-hosted service, a local Anthropic ↔ OpenAI API proxy
 
 ## License
 
