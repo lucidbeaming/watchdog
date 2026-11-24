@@ -12,6 +12,7 @@ dependencies = []
 dynamic = ["version"]
 
 [project.urls]
+Documentation = "https://joshuacurry.dev/watchdog"
 Homepage = "https://github.com/lucidbeaming/watchdog"
 Source = "https://github.com/lucidbeaming/watchdog"
 Issues = "https://github.com/lucidbeaming/watchdog/issues"
