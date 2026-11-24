@@ -2,6 +2,8 @@
 
 Self-hosted dead-man's-switch and uptime monitor with Pushover alerts.
 
+Documentation: [joshuacurry.dev/watchdog](https://joshuacurry.dev/watchdog)
+
 A small, self-hosted monitor that sends alerts through [Pushover](https://pushover.net).
 Pure Python standard library, no dependencies: one daemon, a SQLite file, and an admin TUI.
 
